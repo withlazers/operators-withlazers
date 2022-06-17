@@ -55,7 +55,7 @@ jobs:
             --manifest-path "$op_name/Cargo.toml" | \
           cut -d'#' -f 2)
         helm_version=$(sed -n '/^version: / s/version: *// p' "charts/$op_name/Chart.yaml")
-        helm_appversion=$(sed -n '/^appVersion: / s/appVersion: *// p' "$op_name/charts/$op_name/Chart.yaml" | tr -d "\"'")
+        helm_appversion=$(sed -n '/^appVersion: / s/appVersion: *// p' "charts/$op_name/Chart.yaml" | tr -d "\"'")
 
         set -x
         test "${cargo_version}"   = "${{ steps.op_version.outputs.result }}"
