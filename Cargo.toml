@@ -1,0 +1,9 @@
+[profile.release]
+opt-level = 'z' # Optimize for size
+lto = true
+codegen-units = 1
+
+[workspace]
+members = [
+	"secret-sync-operator",
+]
