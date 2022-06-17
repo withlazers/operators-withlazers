@@ -12,10 +12,7 @@ use k8s_openapi::{
 use kube::{
     api::{ListParams, PostParams},
     core::ObjectMeta,
-    runtime::{
-        controller::{Action, Context},
-        Controller,
-    },
+    runtime::{controller::Action, Controller},
     Api, Client, ResourceExt,
 };
 use log::*;
@@ -38,7 +35,7 @@ async fn main() -> Result<()> {
             .run(
                 reconcile_secret,
                 error_policy,
-                Context::new(Data {
+                Arc::new(Data {
                     client: client.clone()
                 })
             )
@@ -47,7 +44,7 @@ async fn main() -> Result<()> {
             .run(
                 reconcile_namespace,
                 error_policy,
-                Context::new(Data {
+                Arc::new(Data {
                     client: client.clone()
                 })
             )
@@ -102,9 +99,9 @@ fn get_globbers(
 async fn sync_secret(
     secrets: &[Secret],
     namespaces: &[Namespace],
-    ctx: Context<Data>,
+    ctx: Arc<Data>,
 ) -> Result<Action> {
-    let client = &ctx.get_ref().client;
+    let client = &ctx.client;
 
     for secret in secrets {
         if !can_handle(&secret.metadata().annotations) {
@@ -208,11 +205,8 @@ async fn sync_secret(
     Ok(Action::await_change())
 }
 
-async fn reconcile_secret(
-    obj: Arc<Secret>,
-    ctx: Context<Data>,
-) -> Result<Action> {
-    let client = ctx.clone().into_inner().client.clone();
+async fn reconcile_secret(obj: Arc<Secret>, ctx: Arc<Data>) -> Result<Action> {
+    let client = ctx.clone().client.clone();
     let namespaces = Api::<Namespace>::all(client.clone())
         .list(&ListParams::default())
         .await?
@@ -223,9 +217,9 @@ async fn reconcile_secret(
 
 async fn reconcile_namespace(
     obj: Arc<Namespace>,
-    ctx: Context<Data>,
+    ctx: Arc<Data>,
 ) -> Result<Action> {
-    let client = ctx.clone().into_inner().client.clone();
+    let client = ctx.clone().client.clone();
     let secrets = Api::<Secret>::all(client)
         .list(&ListParams::default())
         .await?
@@ -234,6 +228,6 @@ async fn reconcile_namespace(
     sync_secret(&secrets, &[obj.as_ref().clone()], ctx).await
 }
 
-fn error_policy(_error: &Error, _ctx: Context<Data>) -> Action {
+fn error_policy(_error: &Error, _ctx: Arc<Data>) -> Action {
     Action::requeue(Duration::from_secs(5))
 }
