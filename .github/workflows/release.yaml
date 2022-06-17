@@ -68,7 +68,7 @@ jobs:
       uses: docker/metadata-action@v4
       with:
         images: |
-          withlazers/${{ steps.op_verion.outputs.result }}
+          withlazers/${{ steps.op_name.outputs.result }}
     - name: Login to DockerHub
       uses: docker/login-action@v2
       with:
@@ -81,8 +81,8 @@ jobs:
         build-args: |
           OPERATOR_NAME=${{steps.op_name.outputs.result}}
         tags: |
-          sha-${{steps.gitref.outputs.result}}
-          ${{steps.op_version.outputs.result}}
+          withlazers/${{ steps.op_name.outputs.result }}:sha-${{steps.gitref.outputs.result}}
+          withlazers/${{ steps.op_name.outputs.result }}:${{steps.op_version.outputs.result}}
         labels: ${{ steps.meta.outputs.labels }}
         context: ./${{ steps.op_verion.outputs.result }}
 
