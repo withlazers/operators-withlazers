@@ -80,6 +80,8 @@ jobs:
       uses: docker/build-push-action@v3
       with:
         push: true
+        build-args: |
+          OPERATOR_NAME=${{steps.op_name.outputs.result}}
         tags: |
           sha-${{steps.gitref.outputs.result}}
           ${{steps.op_version.outputs.result}}
