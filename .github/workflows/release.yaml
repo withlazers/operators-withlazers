@@ -1,4 +1,4 @@
-name: release
+name: Release
 on:
   push:
     tags:
@@ -29,7 +29,6 @@ jobs:
     - name: Get Short Ref
       id: gitref
       run: echo "::set-output name=result::$(git rev-parse --short HEAD)"
-
     - name: Extract Operator from Tag
       id: op_name
       uses: actions/github-script@v6
@@ -38,7 +37,6 @@ jobs:
         result-encoding: string
         script: |
           return context.payload.ref.match(/refs\/tags\/(.*)-v([0-9]*.[0-9]*.[0-9]*.*)/)[1];
-
     - name: Extract Version from Tag
       id: op_version
       uses: actions/github-script@v6
@@ -56,16 +54,16 @@ jobs:
         cargo_version=$(cargo pkgid \
             --manifest-path "$op_name/Cargo.toml" | \
           cut -d'#' -f 2)
-        helm_version=$(sed -n '/^version: / s/version: *// p' "charts/$op_name/Chart.yaml")
-        helm_appversion=$(sed -n '/^appVersion: / s/appVersion: *// p' "charts/$op_name/Chart.yaml" | tr -d "\"'")
+        helm_version=$(sed -n '/^version: / s/version: *// p' "$op_name/charts/$op_name/Chart.yaml")
+        helm_appversion=$(sed -n '/^appVersion: / s/appVersion: *// p' "$op_name/charts/$op_name/Chart.yaml" | tr -d "\"'")
 
         set -x
         test "${cargo_version}"   = "${{steps.op_version.outputs.result}}"
         test "${helm_version}"    = "${{steps.op_version.outputs.result}}"
         test "${helm_appversion}" = "${{steps.op_version.outputs.result}}"
 
-    # Docker
-    - name: Docker meta
+    # Upload Docker Image
+    - name: Docker Meta
       id: meta
       uses: docker/metadata-action@v4
       with:
@@ -88,9 +86,11 @@ jobs:
         labels: ${{ steps.meta.outputs.labels }}
         context: ./${{ steps.op_verion.outputs.result }}
 
-    #- name: release
-    #  uses: softprops/action-gh-release@v1
-    #  with:
-    #    files: |
-    #      target/x86_64-unknown-linux-musl/release/tpl
-
+    # Release Helm Chart
+    - name: Run chart-releaser
+      uses: helm/chart-releaser-action@v1.4.0
+      with:
+        charts_dir: ./${{ steps.op_verion.outputs.result }}/charts
+        charts_repo_url: https://operators.withlazers.dev
+      env:
+        CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
