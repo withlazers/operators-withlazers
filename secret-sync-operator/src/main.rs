@@ -3,51 +3,27 @@ mod error;
 mod globlist;
 mod result;
 
-use crate::{constants::*, error::Error, globlist::GlobList, result::Result};
-use futures::StreamExt;
-use k8s_openapi::{
-    api::core::v1::{Namespace, Secret},
-    Metadata,
-};
-use kube::{
-    api::{ListParams, PostParams},
-    core::ObjectMeta,
-    runtime::{controller::Action, Controller},
-    Api, Client, ResourceExt,
-};
-use log::*;
-use std::{collections::BTreeMap, sync::Arc, time::Duration};
+use crate::{constants::*, globlist::GlobList, result::Result};
+use common::prelude::*;
+use std::{collections::BTreeMap, sync::Arc};
 
-struct Data {
-    client: Client,
-}
+struct Context(Client);
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    pretty_env_logger::init();
+    init_logger();
 
     let client = Client::try_default().await?;
     let secrets = Api::<Secret>::all(client.clone());
     let namespaces = Api::<Namespace>::all(client.clone());
 
+    let context = Arc::new(Context(client));
     futures::join!(
-        Controller::new(secrets, Default::default())
-            .run(
-                reconcile_secret,
-                error_policy,
-                Arc::new(Data {
-                    client: client.clone()
-                })
-            )
+        Controller::new(secrets, ListParams::default())
+            .run(reconcile_secret, default_error_policy, context.clone())
             .for_each(|_| futures::future::ready(())),
-        Controller::new(namespaces, Default::default())
-            .run(
-                reconcile_namespace,
-                error_policy,
-                Arc::new(Data {
-                    client: client.clone()
-                })
-            )
+        Controller::new(namespaces, ListParams::default())
+            .run(reconcile_namespace, default_error_policy, context.clone())
             .for_each(|_| futures::future::ready(()))
     );
 
@@ -99,9 +75,9 @@ fn get_globbers(
 async fn sync_secret(
     secrets: &[Secret],
     namespaces: &[Namespace],
-    ctx: Arc<Data>,
+    ctx: Arc<Context>,
 ) -> Result<Action> {
-    let client = &ctx.client;
+    let client = &ctx.0;
 
     for secret in secrets {
         if !can_handle(&secret.metadata().annotations) {
@@ -205,8 +181,11 @@ async fn sync_secret(
     Ok(Action::await_change())
 }
 
-async fn reconcile_secret(obj: Arc<Secret>, ctx: Arc<Data>) -> Result<Action> {
-    let client = ctx.clone().client.clone();
+async fn reconcile_secret(
+    obj: Arc<Secret>,
+    ctx: Arc<Context>,
+) -> Result<Action> {
+    let client = &ctx.0;
     let namespaces = Api::<Namespace>::all(client.clone())
         .list(&ListParams::default())
         .await?
@@ -217,17 +196,13 @@ async fn reconcile_secret(obj: Arc<Secret>, ctx: Arc<Data>) -> Result<Action> {
 
 async fn reconcile_namespace(
     obj: Arc<Namespace>,
-    ctx: Arc<Data>,
+    ctx: Arc<Context>,
 ) -> Result<Action> {
-    let client = ctx.clone().client.clone();
-    let secrets = Api::<Secret>::all(client)
+    let client = &ctx.0;
+    let secrets = Api::<Secret>::all(client.clone())
         .list(&ListParams::default())
         .await?
         .items;
 
     sync_secret(&secrets, &[obj.as_ref().clone()], ctx).await
-}
-
-fn error_policy(_error: &Error, _ctx: Arc<Data>) -> Action {
-    Action::requeue(Duration::from_secs(5))
 }
