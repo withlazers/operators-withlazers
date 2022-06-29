@@ -72,7 +72,7 @@ jobs:
     - name: Login to DockerHub
       uses: docker/login-action@v2
       with:
-        username: ${{ secrets.DOCKER_USERNAME }}
+        username: withlazers
         password: ${{ secrets.DOCKER_TOKEN }}
     - name: Build and push
       uses: docker/build-push-action@v3
@@ -98,6 +98,8 @@ jobs:
 
           Source: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
 
-
-
-
+    #- name: release
+    #  uses: softprops/action-gh-release@v1
+    #  with:
+    #    generate_release_notes: true
+    #    draft: true
