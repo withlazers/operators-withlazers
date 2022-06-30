@@ -7,24 +7,20 @@ COPY . .
 
 WORKDIR ${OPERATOR_NAME}
 
-RUN cargo install \
+RUN \
+	mkdir -p /cargo/cargo && \
+	ln -sf $HOME/.cargo/config /cargo/cargo && \
+	CARGO_HOME=/cargo/cargo \
+	CARGO_TARGET_DIR=/cargo/target \
+	cargo install \
 		--path . \
-		--root /target \
-		--bin ${OPERATOR_NAME}
-
-WORKDIR /app
-
-RUN cp /target/bin/${OPERATOR_NAME} . && \
-	ln -s ${OPERATOR_NAME} operator
-
-
+		--root /app \
+		--bin operator
 
 FROM gcr.io/distroless/static:nonroot
-ARG OPERATOR_NAME=none
 
-COPY --chown=nonroot:nonroot --from=build \
-	/app /app
+COPY --from=build /app/bin/operator /
 
 EXPOSE 8080
 
-ENTRYPOINT ["/app/operator"]
+ENTRYPOINT ["/operator"]
