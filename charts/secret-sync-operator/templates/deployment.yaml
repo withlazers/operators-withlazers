@@ -22,14 +22,14 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      env:
-      - name: RUST_LOG
-        value: hyper=warn,{{ .Values.operator.logLevel }}
       serviceAccountName: {{ include "secret-sync-operator.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
       - name: {{ .Chart.Name }}
+        env:
+        - name: RUST_LOG
+          value: hyper=warn,{{ .Values.operator.logLevel }}
         securityContext:
           {{- toYaml .Values.securityContext | nindent 12 }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"

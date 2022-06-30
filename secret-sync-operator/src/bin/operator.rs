@@ -1,17 +1,23 @@
-mod constants;
-mod error;
-mod globlist;
-mod result;
-
-use crate::{constants::*, globlist::GlobList, result::Result};
-use common::prelude::*;
-use std::{collections::BTreeMap, sync::Arc};
+use futures::StreamExt;
+use k8s_openapi::{
+    api::core::v1::{Namespace, Secret},
+    Metadata,
+};
+use kube::{
+    api::{ListParams, Patch, PatchParams, PostParams},
+    core::ObjectMeta,
+    runtime::{controller::Action, Controller},
+    Api, Client, ResourceExt,
+};
+use log::{debug, info, warn};
+use secret_sync_operator::{constants::*, globlist::GlobList, result::Result};
+use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 struct Context(Client);
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    init_logger();
+    pretty_env_logger::init();
 
     let client = Client::try_default().await?;
     let secrets = Api::<Secret>::all(client.clone());
@@ -28,6 +34,14 @@ async fn main() -> Result<()> {
     );
 
     Ok(())
+}
+
+pub fn default_error_policy<E: std::fmt::Debug, D>(
+    _error: &E,
+    _ctx: Arc<D>,
+) -> Action {
+    //Err::<(), _>(error).unwrap();
+    Action::requeue(Duration::from_secs(5))
 }
 
 fn can_handle(annotations: &Option<BTreeMap<String, String>>) -> bool {
@@ -158,7 +172,7 @@ async fn sync_secret(
                     name: secret.metadata().name.clone(),
                     labels: secret.metadata().labels.clone(),
                     annotations: Some(annotations),
-                    ..ObjectMeta::default()
+                    ..Default::default()
                 },
                 ..secret.clone()
             };
@@ -168,10 +182,10 @@ async fn sync_secret(
                 namespace_name
             );
             secret_api
-                .replace(
+                .patch(
                     &new_secret.name(),
-                    &PostParams::default(),
-                    &new_secret,
+                    &PatchParams::apply("secret"),
+                    &Patch::Apply(&new_secret),
                 )
                 .await?;
         }
