@@ -6,5 +6,6 @@ codegen-units = 1
 [workspace]
 members = [
 	"secret-sync-operator",
+	"secret-template-operator",
 	"common",
 ]
