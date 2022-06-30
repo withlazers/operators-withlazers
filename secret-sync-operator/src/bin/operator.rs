@@ -4,7 +4,7 @@ use k8s_openapi::{
     Metadata,
 };
 use kube::{
-    api::{ListParams, Patch, PatchParams, PostParams},
+    api::{ListParams, Patch, PatchParams},
     core::ObjectMeta,
     runtime::{controller::Action, Controller},
     Api, Client, ResourceExt,
