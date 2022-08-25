@@ -25,10 +25,10 @@ async fn main() -> Result<()> {
 
     let context = Arc::new(Context(client));
     futures::join!(
-        Controller::new(secrets, ListParams::default())
+        Controller::new(secrets, list_params())
             .run(reconcile_secret, default_error_policy, context.clone())
             .for_each(|_| futures::future::ready(())),
-        Controller::new(namespaces, ListParams::default())
+        Controller::new(namespaces, list_params())
             .run(reconcile_namespace, default_error_policy, context.clone())
             .for_each(|_| futures::future::ready(()))
     );
@@ -44,16 +44,16 @@ pub fn default_error_policy<E: std::fmt::Debug, D>(
     Action::requeue(Duration::from_secs(5))
 }
 
-fn can_handle(annotations: &Option<BTreeMap<String, String>>) -> bool {
-    let annotations = if let Some(annotations) = annotations {
-        annotations
+fn can_handle(labels: &Option<BTreeMap<String, String>>) -> bool {
+    let labels = if let Some(labels) = labels {
+        labels
     } else {
         return false;
     };
 
-    if !annotations.contains_key(ANNOTATION_ENABLED) {
+    if !labels.contains_key(ANNOTATION_ENABLED) {
         return false;
-    } else if annotations.contains_key(ANNOTATION_CLONED_FROM) {
+    } else if labels.contains_key(ANNOTATION_CLONED_FROM) {
         return false;
     } else {
         return true;
@@ -86,6 +86,27 @@ fn get_globbers(
     }
 }
 
+fn remove_own_fields(
+    field_map: Option<&BTreeMap<String, String>>,
+) -> Option<BTreeMap<String, String>> {
+    if let Some(field_map) = field_map {
+        Some(
+            field_map
+                .iter()
+                .filter_map(|(key, value)| {
+                    if !key.starts_with(ANNOTATION_PREFIX) {
+                        Some((key.to_string(), value.to_string()))
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+        )
+    } else {
+        None
+    }
+}
+
 async fn sync_secret(
     secrets: &[Secret],
     namespaces: &[Namespace],
@@ -94,7 +115,7 @@ async fn sync_secret(
     let client = &ctx.0;
 
     for secret in secrets {
-        if !can_handle(&secret.metadata().annotations) {
+        if !can_handle(&secret.metadata().labels) {
             return Ok(Action::await_change());
         }
         let secret_name = secret.name();
@@ -112,7 +133,7 @@ async fn sync_secret(
         for namespace in namespaces {
             let namespace_name = namespace.name();
 
-            if !can_handle(&namespace.metadata().annotations) {
+            if !can_handle(&namespace.metadata().labels) {
                 debug!(
                     "{}: namespace {} is not enabled",
                     secret_name, namespace_name
@@ -153,14 +174,10 @@ async fn sync_secret(
                 }
             }
 
-            let mut annotations = secret
-                .metadata()
-                .annotations
-                .clone()
-                .unwrap_or_default()
-                .into_iter()
-                .filter(|(k, _)| !k.starts_with(ANNOTATION_PREFIX))
-                .collect::<BTreeMap<_, _>>();
+            let labels = remove_own_fields(secret.metadata().labels.as_ref());
+            let mut annotations =
+                remove_own_fields(secret.metadata().annotations.as_ref())
+                    .unwrap_or_default();
             annotations.insert(
                 ANNOTATION_CLONED_FROM.to_string(),
                 secret.namespace().unwrap(),
@@ -170,7 +187,7 @@ async fn sync_secret(
             let new_secret = Secret {
                 metadata: ObjectMeta {
                     name: secret.metadata().name.clone(),
-                    labels: secret.metadata().labels.clone(),
+                    labels,
                     annotations: Some(annotations),
                     ..Default::default()
                 },
@@ -195,13 +212,17 @@ async fn sync_secret(
     Ok(Action::await_change())
 }
 
+fn list_params() -> ListParams {
+    ListParams::default().labels(ANNOTATION_ENABLED)
+}
+
 async fn reconcile_secret(
     obj: Arc<Secret>,
     ctx: Arc<Context>,
 ) -> Result<Action> {
     let client = &ctx.0;
     let namespaces = Api::<Namespace>::all(client.clone())
-        .list(&ListParams::default())
+        .list(&list_params())
         .await?
         .items;
 
@@ -214,7 +235,7 @@ async fn reconcile_namespace(
 ) -> Result<Action> {
     let client = &ctx.0;
     let secrets = Api::<Secret>::all(client.clone())
-        .list(&ListParams::default())
+        .list(&list_params())
         .await?
         .items;
 
