@@ -1,0 +1,14 @@
+FROM docker.io/alpine:3.16 as build
+
+COPY artifacts /artifacts
+
+RUN cp /artifacts/$(cat /etc/apk/arch)-unknown-linux-musl/bin/operator /operator && \
+	rm -r /artifacts
+
+FROM gcr.io/distroless/static:nonroot
+
+COPY --from=build /operator /
+
+EXPOSE 8080
+
+ENTRYPOINT ["/operator"]
